@@ -1,0 +1,57 @@
+name: Release
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  push:
+    branches:
+      - "main"
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: latest
+
+jobs:
+  publish_github_release:
+    name: "🔄 Publish Github Release"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Append packages to the latest Github Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -ex
+
+          node ./build.mts
+          mkdir -p assets
+
+          cd vendor
+          for name in *; do
+            echo "Packing $name"
+
+            # Archive the package contents (not the folder itself) into ./assets
+            tar -czf "../assets/${name}.tar.gz" -C "$name" .
+          done
+          cd ..
+
+          # Make sure the rolling release exists so uploads have a target
+          if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --title "Latest" \
+              --target "$GITHUB_SHA" \
+              --latest \
+              --notes "Rolling release of vendored packages"
+          fi
+
+          # --clobber replaces assets that changed, new packages are appended
+          gh release upload "$RELEASE_TAG" assets/*.tar.gz --clobber
+ 
