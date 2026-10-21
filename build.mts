@@ -137,8 +137,9 @@ async function buildPackage(
 	entries: BuildManifestEntry[],
 ) {
 	const version = getVersion(packageName);
-	// Flatten scopes into one folder: "@alshdavid/rx@1.2.3" -> "@alshdavid&rx@1.2.3"
-	const outDir = path.join(vendorDir, `${packageName.replace("/", "&")}@${version}`);
+	// Flatten scopes into one folder: "@alshdavid/rx@1.2.3" -> "@alshdavid+rx@1.2.3"
+	// "+" is used because "&" is not allowed in GitHub release asset names
+	const outDir = path.join(vendorDir, `${packageName.replace("/", "+")}@${version}`);
 
 	const aliases = new Map(
 		entries.map((entry) => [

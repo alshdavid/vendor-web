@@ -43,11 +43,16 @@ jobs:
           for name in *; do
             echo "Packing $name"
 
-            version="${name##*@}"
+            # Folder names look like "<package>@<version>", e.g. "rxjs@7.8.2" or
+            # "@alshdavid+rx@0.0.3" (scoped packages are flattened with "+"
+            # because "&" is not allowed in GitHub release asset names)
             package="${name%@*}"
 
+            # Versioned asset, e.g. "rxjs@7.8.2.tar.gz"
             tar -czf "../assets/${name}.tar.gz" -C "$name" .
 
+            # Stable alias that always points at the newest build,
+            # e.g. "rxjs@latest.tar.gz"
             tar -czf "../assets/${package}@latest.tar.gz" -C "$name" .
           done
           cd ..
