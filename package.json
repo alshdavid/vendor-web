@@ -6,6 +6,7 @@
     "rxjs": "*"
   },
   "devDependencies": {
+    "@types/node": "^26.6.5",
     "esbuild": "*",
     "typescript": "^6.0.3"
   },

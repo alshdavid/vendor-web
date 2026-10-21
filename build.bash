@@ -8,6 +8,10 @@ NM="$REPO_ROOT/node_modules"
 ESBUILD="$NM/esbuild/bin/esbuild"
 VENDOR="$REPO_ROOT/vendor"
 
+function pkgv() {
+  node "$REPO_ROOT/get-version.ts" $1
+}
+
 rm -rf vendor
 
 # vendor-types.ts needs the JS compiler API (TypeScript 5.x/6.x, not 7.x)

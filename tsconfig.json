@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "types": ["node"],
+        "lib": ["ESNext"],
+        // scripts are run directly by node (type stripping), never emitted
+        "noEmit": true,
+        "allowImportingTsExtensions": true,
+    },
+    "include": ["./build.mts", "./lib"]
+}
