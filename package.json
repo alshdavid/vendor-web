@@ -1,0 +1,15 @@
+{
+  "type": "module",
+  "dependencies": {
+    "@alshdavid/rx": "*",
+    "preact": "*",
+    "rxjs": "*"
+  },
+  "devDependencies": {
+    "esbuild": "*",
+    "typescript": "^6.0.3"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}
