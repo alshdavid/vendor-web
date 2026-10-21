@@ -8,6 +8,7 @@ import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { vendorTypes } from "./lib/vendor-types.mts";
 import { getVersion } from "./lib/get-version.mts";
+import manifest from "./manifest.json" with { type: "json" };
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 	encoding: "utf8",
@@ -25,22 +26,7 @@ interface BuildManifestEntry {
 	entry: string;
 }
 
-// prettier-ignore
-const BUILD_MANIFEST: BuildManifestEntry[] = [
-	// Preact
-	{ packageName: "preact", 		output: "index.d.ts", 		entry: "dist/preact.mjs" 					},
-	{ packageName: "preact", 		output: "compat.d.ts", 		entry: "compat/dist/compat.mjs" 			},
-	{ packageName: "preact", 		output: "hooks.d.ts", 		entry: "hooks/dist/hooks.mjs" 				},
-	{ packageName: "preact", 		output: "jsx-runtime.d.ts", entry: "jsx-runtime/dist/jsxRuntime.mjs" 	},
-	{ packageName: "preact", 		output: "devtools.d.ts", 	entry: "devtools/dist/devtools.mjs" 		},
-	{ packageName: "preact", 		output: "debug.d.ts", 		entry: "debug/dist/debug.mjs" 				},
-
-	// Rxjs
-	{ packageName: "rxjs", 			output: "index.d.ts", 		entry: "dist/esm5/index.js" 				},
-
-	// @alshdavid/rx
-	{ packageName: "@alshdavid/rx",	output: "index.d.ts", 		entry: "dist/index.js" 						},
-]
+const BUILD_MANIFEST: BuildManifestEntry[] = manifest;
 
 // ---------------------------------------------------------------- helpers
 

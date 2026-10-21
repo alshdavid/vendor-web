@@ -1,0 +1,12 @@
+[
+	{ "packageName": "preact", 		    "output": "index.d.ts", 		"entry": "dist/preact.mjs" 					    },
+	{ "packageName": "preact", 		    "output": "compat.d.ts", 		"entry": "compat/dist/compat.mjs" 			    },
+	{ "packageName": "preact", 		    "output": "hooks.d.ts", 		"entry": "hooks/dist/hooks.mjs" 				},
+	{ "packageName": "preact", 		    "output": "jsx-runtime.d.ts", 	"entry": "jsx-runtime/dist/jsxRuntime.mjs" 	    },
+	{ "packageName": "preact", 		    "output": "devtools.d.ts", 	    "entry": "devtools/dist/devtools.mjs"           },
+	{ "packageName": "preact", 		    "output": "debug.d.ts", 		"entry": "debug/dist/debug.mjs" 				},
+
+	{ "packageName": "rxjs", 			"output": "index.d.ts", 		"entry": "dist/esm5/index.js" 				    },
+
+	{ "packageName": "@alshdavid/rx",	"output": "index.d.ts", 		"entry": "dist/index.js" 				        }
+]
