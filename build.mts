@@ -151,8 +151,8 @@ async function buildPackage(
 	entries: BuildManifestEntry[],
 ) {
 	const version = getVersion(packageName);
-	// Keep scopes as folders: "@alshdavid/rx@1.2.3" -> vendor/@alshdavid/rx@1.2.3
-	const outDir = path.join(vendorDir, `${packageName}@${version}`);
+	// Flatten scopes into one folder: "@alshdavid/rx@1.2.3" -> "@alshdavid&rx@1.2.3"
+	const outDir = path.join(vendorDir, `${packageName.replace("/", "&")}@${version}`);
 
 	const aliases = new Map(
 		entries.map((entry) => [
