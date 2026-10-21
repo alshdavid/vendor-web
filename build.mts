@@ -16,18 +16,30 @@ const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 const nodeModules = path.join(repoRoot, "node_modules");
 const vendorDir = path.join(repoRoot, "vendor");
 
-const PREACT_VERSION = getVersion("preact");
-const RXJS_VERSION = getVersion("rxjs");
-const RX_VERSION = getVersion("@alshdavid/rx");
+interface BuildManifestEntry {
+	/** Package to vendor, e.g. "preact" */
+	packageName: string;
+	/** Declaration file to emit into the package's vendor folder, e.g. "compat.d.ts" */
+	output: string;
+	/** JavaScript entry point, relative to the package root */
+	entry: string;
+}
 
 // prettier-ignore
-const BUILD_MANIFEST = [
-	{ packageName: "preact", output: "index.d.ts", entry: "dist/preact.mjs" },
-	{ packageName: "preact", output: "compat.d.ts", entry: "compat/dist/compat.mjs" },
-	{ packageName: "preact", output: "hooks.d.ts", entry: "hooks/dist/hooks.mjs" },
-	{ packageName: "preact", output: "jsx-runtime.d.ts", entry: "jsx-runtime/dist/jsxRuntime.mjs" },
-	{ packageName: "preact", output: "devtools.d.ts", entry: "devtools/dist/devtools.mjs" },
-	{ packageName: "preact", output: "debug.d.ts", entry: "debug/dist/debug.mjs" },
+const BUILD_MANIFEST: BuildManifestEntry[] = [
+	// Preact
+	{ packageName: "preact", 		output: "index.d.ts", 		entry: "dist/preact.mjs" 					},
+	{ packageName: "preact", 		output: "compat.d.ts", 		entry: "compat/dist/compat.mjs" 			},
+	{ packageName: "preact", 		output: "hooks.d.ts", 		entry: "hooks/dist/hooks.mjs" 				},
+	{ packageName: "preact", 		output: "jsx-runtime.d.ts", entry: "jsx-runtime/dist/jsxRuntime.mjs" 	},
+	{ packageName: "preact", 		output: "devtools.d.ts", 	entry: "devtools/dist/devtools.mjs" 		},
+	{ packageName: "preact", 		output: "debug.d.ts", 		entry: "debug/dist/debug.mjs" 				},
+
+	// Rxjs
+	{ packageName: "rxjs", 			output: "index.d.ts", 		entry: "dist/esm5/index.js" 				},
+
+	// @alshdavid/rx
+	{ packageName: "@alshdavid/rx",	output: "index.d.ts", 		entry: "dist/index.js" 						},
 ]
 
 // ---------------------------------------------------------------- helpers
@@ -82,95 +94,91 @@ function vendorTypesFor(entries: Array<[input: string, outfile: string]>) {
 	console.log(`Vendored ${fileCount} declaration files into ${outDir}`);
 }
 
-// ---------------------------------------------------------------- preact
+// The manifest's output name identifies the export subpath (e.g. "compat.d.ts"
+// is the "<package>/compat" export, while "index.d.ts" is the package root)
+function exportSpecifier(packageName: string, output: string) {
+	const subpath = path.basename(output).replace(/\.d\.[cm]?ts$/, "");
+	return subpath === "index" ? packageName : `${packageName}/${subpath}`;
+}
 
-const PREACT_ALIASES: Record<string, string> = {
-	preact: "./index.js",
-	"preact/hooks": "./hooks.js",
-	"preact/compat": "./compat.js",
-	"preact/jsx-runtime": "./jsx-runtime.js",
-	"preact/devtools": "./devtools.js",
-	"preact/debug": "./debug.js",
-};
+function jsOutputName(output: string) {
+	return path
+		.basename(output)
+		.replace(/\.d\.ts$/, ".js")
+		.replace(/\.d\.mts$/, ".mjs")
+		.replace(/\.d\.cts$/, ".cjs");
+}
 
-// Rewrite bare `preact` specifiers left external by esbuild into relative paths
-function rewritePreactImports(file: string) {
+function escapeRegExp(value: string) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Rewrite bare package specifiers left external by esbuild into relative paths
+function rewriteSelfImports(
+	file: string,
+	packageName: string,
+	aliases: Map<string, string>,
+) {
 	const source = fs.readFileSync(file, "utf8");
+	const pattern = new RegExp(
+		`\\b(from|import)\\s*"(${escapeRegExp(packageName)}(?:/[\\w.-]+)?)"`,
+		"g",
+	);
 	const rewritten = source.replace(
-		/\b(from|import)\s*"(preact(?:\/[\w-]+)?)"/g,
+		pattern,
 		(match, keyword: string, specifier: string) => {
-			const alias = PREACT_ALIASES[specifier];
+			const alias = aliases.get(specifier);
 			return alias ? `${keyword}"${alias}"` : match;
 		},
 	);
 	fs.writeFileSync(file, rewritten);
 
-	if (/\b(from|import)\s*"preact/.test(rewritten)) {
-		throw new Error(`unrewritten preact import left in ${file}`);
+	if (
+		new RegExp(
+			`\\b(from|import)\\s*"${escapeRegExp(packageName)}(?:/|")`,
+		).test(rewritten)
+	) {
+		throw new Error(`unrewritten ${packageName} import left in ${file}`);
 	}
 }
 
-// Bundle one preact entry. preact itself stays external so hooks/compat/etc.
-// share the single runtime in index.js, then bare specifiers become relative.
-async function bundlePreactEntry(
-	name: string,
-	input: string,
-	outDir: string,
+// Vendors one package's entrypoints. The package itself stays external while
+// bundling so hooks/compat/etc. share a single runtime, then those specifiers
+// are rewritten into relative paths and all type entries are emitted in one
+// pass so they share a single `_deps` copy.
+async function buildPackage(
+	packageName: string,
+	entries: BuildManifestEntry[],
 ) {
-	const outfile = path.join(outDir, `${name}.js`);
-	await bundle({ input, outfile, external: ["preact", "preact/*"] });
-	rewritePreactImports(outfile);
-}
+	const version = getVersion(packageName);
+	// Keep scopes as folders: "@alshdavid/rx@1.2.3" -> vendor/@alshdavid/rx@1.2.3
+	const outDir = path.join(vendorDir, `${packageName}@${version}`);
 
-async function buildPreact() {
-	const preactDir = path.join(nodeModules, "preact");
-	const outDir = path.join(vendorDir, `preact@${PREACT_VERSION}`);
+	const aliases = new Map(
+		entries.map((entry) => [
+			exportSpecifier(packageName, entry.output),
+			`./${jsOutputName(entry.output)}`,
+		]),
+	);
 
-	// Preact's own entry only needs bundling (nothing external to rewrite)
-	await bundle({
-		input: path.join(preactDir, "dist/preact.mjs"),
-		outfile: path.join(outDir, "index.js"),
-	});
+	const typeEntries: Array<[input: string, outfile: string]> = [];
 
-	await bundlePreactEntry("compat", path.join(preactDir, "compat/dist/compat.mjs"), outDir);
-	await bundlePreactEntry("hooks", path.join(preactDir, "hooks/dist/hooks.mjs"), outDir);
-	await bundlePreactEntry("jsx-runtime", path.join(preactDir, "jsx-runtime/dist/jsxRuntime.mjs"), outDir);
-	await bundlePreactEntry("devtools", path.join(preactDir, "devtools/dist/devtools.mjs"), outDir);
-	await bundlePreactEntry("debug", path.join(preactDir, "debug/dist/debug.mjs"), outDir);
+	for (const entry of entries) {
+		const outfile = path.join(outDir, jsOutputName(entry.output));
+		await bundle({
+			input: path.join(nodeModules, packageName, entry.entry),
+			outfile,
+			external: [packageName, `${packageName}/*`],
+		});
+		rewriteSelfImports(outfile, packageName, aliases);
 
-	// All preact entrypoints in ONE run so they share a single copy of the types
-	vendorTypesFor([
-		[typesOf("preact"), path.join(outDir, "index.d.ts")],
-		[typesOf("preact/compat"), path.join(outDir, "compat.d.ts")],
-		[typesOf("preact/hooks"), path.join(outDir, "hooks.d.ts")],
-		[typesOf("preact/jsx-runtime"), path.join(outDir, "jsx-runtime.d.ts")],
-		[typesOf("preact/devtools"), path.join(outDir, "devtools.d.ts")],
-		[typesOf("preact/debug"), path.join(outDir, "debug.d.ts")],
-	]);
-}
+		typeEntries.push([
+			typesOf(exportSpecifier(packageName, entry.output)),
+			path.join(outDir, entry.output),
+		]);
+	}
 
-// ---------------------------------------------------------------- rxjs
-
-async function buildRxjs() {
-	const outDir = path.join(vendorDir, `rxjs@${RXJS_VERSION}`);
-
-	await bundle({
-		input: path.join(nodeModules, "rxjs/dist/esm5/index.js"),
-		outfile: path.join(outDir, "index.js"),
-	});
-	vendorTypesFor([[typesOf("rxjs"), path.join(outDir, "index.d.ts")]]);
-}
-
-// ---------------------------------------------------------------- @alshdavid/rx
-
-async function buildRx() {
-	const outDir = path.join(vendorDir, `rx@${RX_VERSION}`);
-
-	await bundle({
-		input: path.join(nodeModules, "@alshdavid/rx/dist/index.js"),
-		outfile: path.join(outDir, "index.js"),
-	});
-	vendorTypesFor([[typesOf("@alshdavid/rx"), path.join(outDir, "index.d.ts")]]);
+	vendorTypesFor(typeEntries);
 }
 
 // ---------------------------------------------------------------- main
@@ -180,9 +188,17 @@ async function main() {
 
 	fs.rmSync(vendorDir, { recursive: true, force: true });
 
-	await buildPreact();
-	await buildRxjs();
-	await buildRx();
+	// Group manifest rows by package so each package is vendored in one pass
+	const packages = new Map<string, BuildManifestEntry[]>();
+	for (const entry of BUILD_MANIFEST) {
+		const entries = packages.get(entry.packageName);
+		if (entries) entries.push(entry);
+		else packages.set(entry.packageName, [entry]);
+	}
+
+	for (const [packageName, entries] of packages) {
+		await buildPackage(packageName, entries);
+	}
 }
 
 main().catch((error: unknown) => {
